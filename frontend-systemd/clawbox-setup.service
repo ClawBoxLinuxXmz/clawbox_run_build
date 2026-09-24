@@ -1,0 +1,31 @@
+# ClawBox 前端 Web 服务 (Next.js, 端口80)
+# 模板来源: 旧设备 /etc/systemd/system/clawbox-setup.service (2026-08-10 导出)
+# 差异: ExecStart 旧设备用 /usr/bin/node(v20), 新设备统一用 /opt/node22/bin/node(v22.23.2)
+[Unit]
+Description=ClawBox Setup Wizard Web Server
+After=network-online.target clawbox-ap.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clawbox
+WorkingDirectory=/home/clawbox/clawbox
+ExecStart=/opt/node22/bin/node production-server.cjs
+Restart=always
+RestartSec=3
+EnvironmentFile=-/home/clawbox/clawbox/data/network.env
+EnvironmentFile=-/home/clawbox/clawbox/.env
+Environment=NODE_ENV=production
+Environment=PORT=80
+Environment=HOSTNAME=0.0.0.0
+# 子进程 spawn 的 openclaw/nmcli 需 node22 在 PATH (2026-08-12 从零部署踩坑)
+Environment=PATH=/opt/node22/bin:/usr/local/bin:/usr/bin:/bin
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/clawbox/clawbox /home/clawbox/.bun /home/clawbox/.npm-global /home/clawbox/.npm /home/clawbox/.openclaw /tmp
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,57 @@
+{
+  "gateway": {
+    "auth": {
+      "mode": "none",
+      "token": "CHANGE_ME_RANDOM_HEX"
+    },
+    "controlUi": {
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true
+    }
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.7.1-2"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "deepseek/deepseek-v4-flash"
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "deepseek": {
+        "enabled": true
+      },
+      "openclaw-weixin": {
+        "enabled": true
+      },
+      "whatsapp": {
+        "enabled": true
+      },
+      "qqbot": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      },
+      "line": {
+        "enabled": true
+      },
+      "telegram": {
+        "enabled": true
+      }
+    }
+  },
+  "models": {
+    "mode": "merge"
+  },
+  "auth": {
+    "profiles": {}
+  },
+  "channels": {},
+  "skills": {
+    "entries": {}
+  }
+}

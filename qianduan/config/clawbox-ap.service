@@ -1,0 +1,15 @@
+[Unit]
+Description=ClawBox WiFi Access Point and Captive Portal
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/home/clawbox/clawbox/data/network.env
+EnvironmentFile=-/home/clawbox/clawbox/data/hotspot.env
+ExecStart=/home/clawbox/clawbox/scripts/start-ap.sh
+ExecStop=/home/clawbox/clawbox/scripts/stop-ap.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,47 @@
+{
+  "name": "clawbox",
+  "version": "2.2.2",
+  "private": true,
+  "description": "Setup wizard and dashboard for ClawBox — a lightweight IoT device for WalnutPi 2B",
+  "homepage": "https://openclawhardware.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ID-Robots/clawbox.git"
+  },
+  "author": "IDRobots Ltd <yanko@idrobots.com> (https://idrobots.com)",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev:privileged": "next dev --hostname 0.0.0.0 --port 80",
+    "prebuild": "node ./scripts/prebuild.mjs",
+    "build": "next build",
+    "postbuild": "node ./scripts/postbuild.mjs",
+    "start": "node production-server.js",
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.72.0",
+    "@tencent-connect/qqbot-connector": "1.2.0",
+    "next": "16.1.6",
+    "qrcode.react": "^4.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "undici": "^7.29.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.0.18"
+  }
+}

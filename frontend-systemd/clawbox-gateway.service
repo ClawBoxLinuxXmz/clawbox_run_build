@@ -1,0 +1,24 @@
+# ClawBox OpenClaw 网关服务 (端口18789, loopback)
+# 模板来源: 旧设备 /etc/systemd/system/clawbox-gateway.service (2026-08-10 导出)
+[Unit]
+Description=ClawBox OpenClaw Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clawbox
+WorkingDirectory=/home/clawbox
+ExecStart=/home/clawbox/.npm-global/bin/openclaw gateway --allow-unconfigured --bind loopback
+Restart=always
+RestartSec=5
+Environment=HOME=/home/clawbox
+# openclaw 的 #!/usr/bin/env node 需解析到 node22; 不依赖 /usr/local/bin 软链 (2026-08-12 从零部署踩坑)
+Environment=PATH=/opt/node22/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--max-old-space-size=1024
+Environment=OPENCLAW_VERBOSE=1
+EnvironmentFile=-/home/clawbox/clawbox/data/network.env
+
+[Install]
+WantedBy=multi-user.target

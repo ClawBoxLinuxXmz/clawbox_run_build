@@ -1,0 +1,225 @@
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import fs from "fs/promises";
+import path from "path";
+import { DATA_DIR } from "@/lib/config-store";
+import { OAUTH_PROVIDERS, isGoogleConfigured } from "@/lib/oauth-config";
+import { discoverGoogleProject } from "@/lib/google-project";
+
+const STATE_PATH = path.join(DATA_DIR, "oauth-state.json");
+
+function parseErrorMessage(text: string, status: number): string {
+  try {
+    const j = JSON.parse(text) as Record<string, unknown>;
+    return (
+      (j.error_description as string) ??
+      (typeof j.error === "object" && j.error !== null
+        ? String((j.error as { message?: string }).message)
+        : (j.error as string)) ??
+      (j.message as string) ??
+      `Token exchange failed (${status})`
+    );
+  } catch {
+    return text?.slice(0, 200) || `Token exchange failed (${status})`;
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    let body: { code?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
+
+    const rawCode = body.code?.trim();
+    if (!rawCode) {
+      return NextResponse.json({ error: "Authorization code is required" }, { status: 400 });
+    }
+
+    let code = rawCode;
+    let codeState: string | undefined;
+    if (rawCode.includes("#")) {
+      const parts = rawCode.split("#");
+      code = parts[0];
+      codeState = parts[1];
+    }
+
+    let stored: {
+      codeVerifier: string;
+      state: string;
+      provider: string;
+      createdAt: number;
+    };
+    try {
+      const raw = await fs.readFile(STATE_PATH, "utf-8");
+      stored = JSON.parse(raw);
+    } catch {
+      return NextResponse.json(
+        { error: "No pending OAuth session. Start the connection flow first." },
+        { status: 400 },
+      );
+    }
+
+    if (Date.now() - stored.createdAt > 10 * 60 * 1000) {
+      await fs.unlink(STATE_PATH).catch(() => {});
+      return NextResponse.json({ error: "OAuth session expired. Please start again." }, { status: 400 });
+    }
+
+    const provider = stored.provider || "anthropic";
+    if (provider === "google" && !isGoogleConfigured) {
+      await fs.unlink(STATE_PATH).catch(() => {});
+      return NextResponse.json(
+        { error: "Google OAuth credentials not configured. Run install.sh to set them up." },
+        { status: 500 },
+      );
+    }
+    const config = OAUTH_PROVIDERS[provider];
+    if (!config) {
+      await fs.unlink(STATE_PATH).catch(() => {});
+      return NextResponse.json(
+        { error: `OAuth not supported for provider: ${provider}` },
+        { status: 400 },
+      );
+    }
+
+    const exchangeBody: Record<string, string> = {
+      grant_type: "authorization_code",
+      client_id: config.clientId,
+      code,
+      redirect_uri: config.redirectUri,
+      code_verifier: stored.codeVerifier,
+    };
+
+    if (provider === "anthropic") {
+      if (!codeState || codeState !== stored.state) {
+        await fs.unlink(STATE_PATH).catch(() => {});
+        console.error("[oauth/exchange] State mismatch:", { codeState, expected: stored.state });
+        return NextResponse.json(
+          { error: "OAuth state mismatch. Please restart the authorization flow." },
+          { status: 403 },
+        );
+      }
+      exchangeBody.state = codeState;
+    }
+
+    if (config.clientSecret) {
+      exchangeBody.client_secret = config.clientSecret;
+    }
+
+    const useFormEncoding = provider !== "anthropic";
+    let tokenRes: Response;
+    const tokenController = new AbortController();
+    const tokenTimeout = setTimeout(() => tokenController.abort(), 30_000);
+    try {
+      tokenRes = await fetch(config.tokenEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": useFormEncoding
+            ? "application/x-www-form-urlencoded"
+            : "application/json",
+        },
+        body: useFormEncoding ? new URLSearchParams(exchangeBody).toString() : JSON.stringify(exchangeBody),
+        signal: tokenController.signal,
+      });
+    } catch (fetchErr) {
+      if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
+        return NextResponse.json({ error: "Token exchange timed out" }, { status: 504 });
+      }
+      throw fetchErr;
+    } finally {
+      clearTimeout(tokenTimeout);
+    }
+
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text().catch(() => "");
+      return NextResponse.json({ error: parseErrorMessage(errText, tokenRes.status) }, { status: 502 });
+    }
+
+    const tokenData = (await tokenRes.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      id_token?: string;
+    };
+
+    if (provider === "openai" && tokenData.id_token) {
+      let apiKeyToken: string | undefined;
+      let apiKeyExpires: number | undefined;
+
+      try {
+        const exchangeParams: Record<string, string> = {
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          client_id: config.clientId,
+          requested_token: "openai-api-key",
+          subject_token: tokenData.id_token,
+          subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
+        };
+
+        const apiKeyRes = await fetch(config.tokenEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(exchangeParams).toString(),
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        if (apiKeyRes.ok) {
+          try {
+            const apiKeyData = (await apiKeyRes.json()) as {
+              access_token?: string;
+              api_key?: string;
+              expires_in?: number;
+            };
+            apiKeyToken = apiKeyData.access_token || apiKeyData.api_key;
+            apiKeyExpires = apiKeyData.expires_in;
+            console.log("[oauth/exchange] API key exchange succeeded");
+          } catch (parseErr) {
+            const raw = await apiKeyRes.text().catch(() => "(unreadable)");
+            console.error("[oauth/exchange] API key exchange JSON parse error:", parseErr, "raw:", raw);
+          }
+        } else {
+          const errBody = await apiKeyRes.text().catch(() => "");
+          console.error("[oauth/exchange] API key exchange failed:", apiKeyRes.status, errBody);
+        }
+      } catch (e) {
+        console.error("[oauth/exchange] API key exchange error, using access_token:", e);
+      }
+
+      await fs.unlink(STATE_PATH).catch(() => {});
+      const orgPath = path.join(path.dirname(STATE_PATH), "oauth-org.json");
+      await fs.unlink(orgPath).catch(() => {});
+
+      return NextResponse.json({
+        access_token: apiKeyToken || tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        expires_in: apiKeyExpires || tokenData.expires_in,
+      });
+    }
+
+    await fs.unlink(STATE_PATH).catch(() => {});
+
+    let projectId: string | undefined;
+    if (provider === "google" && tokenData.access_token) {
+      try {
+        projectId = await discoverGoogleProject(tokenData.access_token);
+        console.log("[oauth/exchange] Google projectId:", projectId ?? "(not found)");
+      } catch (e) {
+        console.error("[oauth/exchange] Failed to discover Google projectId:", e);
+      }
+    }
+
+    return NextResponse.json({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+      expires_in: tokenData.expires_in,
+      ...(projectId ? { projectId } : {}),
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to exchange token" },
+      { status: 500 },
+    );
+  }
+}

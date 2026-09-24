@@ -1,0 +1,19 @@
+[Unit]
+Description=ClawBox OLED Display Service
+After=network.target
+Requires=
+
+[Service]
+Type=simple
+User=clawbox
+Group=clawbox
+WorkingDirectory=/home/clawbox/clawbox
+ExecStart=/home/clawbox/oled-env/bin/python3 /home/clawbox/clawbox/scripts/oled-display.py
+Restart=always
+RestartSec=5
+EnvironmentFile=-/home/clawbox/clawbox/data/device-hostname.env
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

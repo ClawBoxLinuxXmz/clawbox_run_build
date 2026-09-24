@@ -1,0 +1,40 @@
+[Unit]
+# ⚠️ 本服务仅作备用, 严禁 systemctl enable: 开机由 rc.local → supervisor.sh 拉起,
+#    enable 会与 rc.local 双启动 → 双实例抢 GPIO/SPI (Device or resource busy,
+#    2026-08-10 实机踩坑)。install.sh 已 disable; 手动 enable 前想清楚。
+Description=ClawBox Peripheral Daemon
+Documentation=https://github.com/Shanmencaiqin/clawbox_linux
+After=network.target multi-user.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/clawbox/clawbox-deploy/clawbox-peripheral
+ExecStart=/usr/bin/python3 /home/clawbox/clawbox-deploy/clawbox-peripheral/peripheral_daemon.py
+
+# 优雅停止
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=8
+TimeoutStartSec=15
+
+# 仅异常退出时自动重启；SIGTERM 优雅退出(status=0)后保持停止
+Restart=on-failure
+RestartSec=3
+
+# 防止无限重启 (60秒内重启超过5次则停止)
+StartLimitInterval=60
+StartLimitBurst=5
+
+# 环境变量
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/default/clawbox-peripheral
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=clawbox-peripheral
+
+[Install]
+WantedBy=multi-user.target

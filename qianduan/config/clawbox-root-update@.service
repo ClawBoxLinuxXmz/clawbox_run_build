@@ -1,0 +1,8 @@
+[Unit]
+Description=ClawBox Root Update Step (%i)
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/clawbox/network.env
+ExecStart=/bin/bash /home/clawbox/clawbox/install.sh --step %i
+TimeoutStartSec=600

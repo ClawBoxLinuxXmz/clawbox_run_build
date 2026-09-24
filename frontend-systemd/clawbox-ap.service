@@ -1,0 +1,17 @@
+# ClawBox WiFi 热点 + Captive Portal
+# 模板来源: 旧设备 /etc/systemd/system/clawbox-ap.service (2026-08-10 导出)
+[Unit]
+Description=ClawBox WiFi Access Point and Captive Portal
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/home/clawbox/clawbox/data/network.env
+EnvironmentFile=-/home/clawbox/clawbox/data/hotspot.env
+ExecStart=/home/clawbox/clawbox/scripts/start-ap.sh
+ExecStop=/home/clawbox/clawbox/scripts/stop-ap.sh
+
+[Install]
+WantedBy=multi-user.target
